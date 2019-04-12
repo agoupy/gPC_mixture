@@ -1,24 +1,55 @@
 %% Plot densities
+clear all; close all;
+
 %generate sample
-n=100000;
+n=1e3;
 a=randn(n,1);
 b=randn(n,1);
+points=[a b];
+w=ones(n,1)./n;
 
-delta=2;
-sample=example(delta,a,b);
+m=2;
+delta=20;
+sample = example(delta,a,b);
+id = kmeans(sample,m);
+sample_1 = sample(id==1); 
+sample_2 = sample(id==2);
+points1=[a(id==1) b(id==1)];
+points2=[a(id==2) b(id==2)];
+sample_separated={sample_1,sample_2};
 
 %plot
-close(figure(1))
-fi=figure(1);
-fi.Position=[1336 417 707 552];
-[f1,xi1] = ksdensity(sample);
-plot(xi1,f1,'LineWidth',2,'DisplayName','Reference');
+if 0
+f1=figure;
+plot3(a,b,sample,'r+');
 hold on
-ax=gca;
-ax.FontSize=16;
-set(gcf, 'Renderer', 'painters');
-title(['Theoretical density vs gPC reconstruction for $\delta$ = ' num2str(delta)], ...
-    'Interpreter', 'latex');
+h(1)=plot3(a(id==1),b(id==1),sample(id==1),'bo');
+h(2)=plot3(a(id==2),b(id==2),sample(id==2),'go');
+
+f2=figure;
+xcoord=linspace(-50,50,1000);
+[f1,xi1] = ksdensity(sample,xcoord,'Weights',w);
+plot(xi1,f1,'LineWidth',2,'DisplayName','Reference');
+end
+%% Build metamodel of indicator using kriging
+
+new_points=randn(1e2,2);
+[m,std]=krigeage(new_points,points,id);
+new_id=round(m);
+
+f3=figure;
+plot3(points(:,1),points(:,2),id,'.k','LineWidth',2,'DisplayName','Original Points')
+hold on
+plot3(new_points(:,1),new_points(:,2),m,'r+','LineWidth',2,'DisplayName','mean')
+plot3(new_points(:,1),new_points(:,2),m+std,'g^','LineWidth',2,'DisplayName','mean+std')
+plot3(new_points(:,1),new_points(:,2),m-std,'g^','LineWidth',2,'DisplayName','mean-std')
+plot3(new_points(:,1),new_points(:,2),new_id,'bo','LineWidth',2,'DisplayName','Interpoled indicatrix')
+legend show
+xlabel('$\xi_1$','FontSize',16,'Interpreter','latex')
+ylabel('$\xi_2$','FontSize',16,'Interpreter','latex')
+zlabel('$Ind(\xi_1,\xi_2)$','FontSize',16,'Interpreter','latex')
+title('Kriging interpolation of the indicator function')
+
 
 %% Simple gPC estimation
 
