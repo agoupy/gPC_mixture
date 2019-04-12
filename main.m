@@ -1,104 +1,131 @@
 %% Plot densities
 clear all; close all;
+opt_plot=1;
 
-%generate sample
-n=1e3;
-a=randn(n,1);
-b=randn(n,1);
-points=[a b];
-w=ones(n,1)./n;
+delta = 20;
+m = 2;
 
-m=2;
-delta=20;
-sample = example(delta,a,b);
-id = kmeans(sample,m);
-sample_1 = sample(id==1); 
-sample_2 = sample(id==2);
-points1=[a(id==1) b(id==1)];
-points2=[a(id==2) b(id==2)];
-sample_separated={sample_1,sample_2};
+
+switch 'cloud'
+    
+    case 'cloud'
+        %generate sample
+        n = 5e3;
+        a = randn(n,1);
+        b = randn(n,1);
+        w=ones(n,1)./n;
+        p=[a b];
+        
+        sample = example(delta,a,b);
+        id = kmeans(sample,m);
+        
+    case 'quad'
+        order = 10;
+        dim=2;
+        [p,w]= make_quadrature(dim, order);
+        a=p(:,1);
+        b=p(:,2);
+        sample = example(delta,a,b);
+        id = kmeans(sample,m);
+end
 
 %plot
-if 0
-f1=figure;
-plot3(a,b,sample,'r+');
-hold on
-h(1)=plot3(a(id==1),b(id==1),sample(id==1),'bo');
-h(2)=plot3(a(id==2),b(id==2),sample(id==2),'go');
-
-f2=figure;
-xcoord=linspace(-50,50,1000);
-[f1,xi1] = ksdensity(sample,xcoord,'Weights',w);
-plot(xi1,f1,'LineWidth',2,'DisplayName','Reference');
+if opt_plot
+    f1=figure(1);
+    xcoord=linspace(-50,50,1000);
+    [f1,xi1] = ksdensity(sample,xcoord,'Weights',w);
+    p1(1)=plot(xi1,f1,'LineWidth',2,'DisplayName','Original Points');
+    
+    f2=figure(2);
+    p2(1)=plot3(a,b,sample,'r+','DisplayName','Original Points');
+    %     hold on
+    %     plot3(a(id==1),b(id==1),sample(id==1),'bo');
+    %     plot3(a(id==2),b(id==2),sample(id==2),'go');
+    
 end
 %% Build metamodel of indicator using kriging
 
-new_points=randn(1e2,2);
-[m,std]=krigeage(new_points,points,id);
-new_id=round(m);
+n_new=1e3;
+new_p=randn(n_new,2);
+[mean_id,std_id]=krigeage(new_p,p,id);
+new_id=round(mean_id);
 
-f3=figure;
-plot3(points(:,1),points(:,2),id,'.k','LineWidth',2,'DisplayName','Original Points')
+f3=figure(3);
+p3(1)=plot3(p(:,1),p(:,2),id,'.k','LineWidth',2,'DisplayName','Indicator on original points');
 hold on
-plot3(new_points(:,1),new_points(:,2),m,'r+','LineWidth',2,'DisplayName','mean')
-plot3(new_points(:,1),new_points(:,2),m+std,'g^','LineWidth',2,'DisplayName','mean+std')
-plot3(new_points(:,1),new_points(:,2),m-std,'g^','LineWidth',2,'DisplayName','mean-std')
-plot3(new_points(:,1),new_points(:,2),new_id,'bo','LineWidth',2,'DisplayName','Interpoled indicatrix')
-legend show
+% p3(3)=plot3(new_p(:,1),new_p(:,2),mean_id,'r+','LineWidth',2,'DisplayName','mean')
+% p3(4)=plot3(new_p(:,1),new_p(:,2),mean_id+std_id,'g^','LineWidth',2,'DisplayName','mean+std')
+% p3(5)=plot3(new_p(:,1),new_p(:,2),mean_id-std_id,'g^','LineWidth',2,'DisplayName','mean-std')
+p3(2)=plot3(new_p(:,1),new_p(:,2),new_id,'bo','LineWidth',2,'DisplayName','Indicator on new points');
 xlabel('$\xi_1$','FontSize',16,'Interpreter','latex')
 ylabel('$\xi_2$','FontSize',16,'Interpreter','latex')
 zlabel('$Ind(\xi_1,\xi_2)$','FontSize',16,'Interpreter','latex')
+l3=legend(p3);
+l3.Location='northwest';
 title('Kriging interpolation of the indicator function')
+set(gcf, 'Renderer', 'painters');
 
+%% gPC estimation on each sample
 
-%% Simple gPC estimation
-
-% generate quadrature
-order_max = 100;
+% polynomials
+order_max=5;
 dim=2;
-[ points, weights ] = make_quadrature( dim, order_max );
-Nq=size(points,1);
-
-% estimate variable at quadrature points
-sample_quad=example(delta,points(:,1),points(:,2));
-
-% generate & evaluate polynomials
 He=poly1D(order_max,'hermite-prob-norm');
 alpha=multi_index(dim,order_max);
 P_max=size(alpha,1);
-pol=ones(Nq,P_max);
+pol=ones(n,P_max);
+
+% polynomial evaluation
 for i=1:P_max
-    %polynomial evaluation
     for j=1:dim
-        pol(:,i)=polyval(He{alpha(i,j)+1},points(:,j)).*pol(:,i);
+        pol(:,i)=polyval(He{alpha(i,j)+1},p(:,j)).*pol(:,i);
     end
 end
 
-% Compute the gPC coefficients
-coeffs=NaN(P_max,1);
+%Compute coefficients for each sample
+a=NaN(P_max,m);
+for i_sample=1:m
+    n_sample=sum(id==i_sample);
+    for i=1:P_max
+        a(i,i_sample) = n/n_sample*sum(sample(id==i_sample).*pol(id==i_sample,i).*w(id==i_sample),1);
+    end
+end
+
+
+%% Use indicator and gPC to generate a sample and plot density
+
+%Compute densities
+pol_gPC=ones(n_new,P_max);
+%polynomial evaluation
 for i=1:P_max
-    coeffs(i,1)=sum(sample_quad.*pol(:,i).*weights);
-end
-
-% Use the gPC expansion to approx density
-points_gPC=[a b];
-
-for order=[5 15 40 80]
-    temp=(order+1):(order+dim);
-    P=prod(temp)/factorial(dim);
-    pol_MC=ones(n,P);
-    for i=1:P
-        %polynomial evaluation
-        for j=1:dim
-            pol_MC(:,i)=polyval(He{alpha(i,j)+1},points_gPC(:,j)).*pol_MC(:,i);
-        end
+    for j=1:dim
+        pol_gPC(:,i) = polyval(He{alpha(i,j)+1},new_p(:,j)).*pol_gPC(:,i);
     end
-    
-    sample_gPC=sum(repmat(coeffs(1:P),[1 n]).*pol_MC.',1);
-    [f2,xi2] = ksdensity(sample_gPC);
-    plot(xi2,f2,'--','LineWidth',2,'DisplayName',['p = ' num2str(order)]);
 end
 
-legend show
-xlim([-6 6])
-ylim([0 0.35])
+sample_gPC1=pol_gPC(new_id==1,:)*a(:,1);
+sample_gPC2=pol_gPC(new_id==2,:)*a(:,2);
+
+if opt_plot
+    figure(1); hold on;
+    xcoord1=linspace(0,80,1000);
+    xcoord2=linspace(-80,0,1000);
+    m1=mean(sample_gPC1);m2=mean(sample_gPC2);
+    [f1,xi1] = ksdensity(sample_gPC1,xcoord1.*(m1>0)+xcoord2.*(m1<0));
+    [f2,xi2] = ksdensity(sample_gPC2,xcoord1.*(m2>0)+xcoord2.*(m2<0));
+    p1(2)=plot(xi1,f1,'LineWidth',2,'DisplayName','gPC - sample 1');
+    p1(3)=plot(xi2,f2,'LineWidth',2,'DisplayName','gPC - sample 2');
+    l1=legend(p1);
+    l1.Location='northwest';
+    title('Densities comparison')
+    set(gcf, 'Renderer', 'painters');
+    
+    figure(2);hold on;
+    p2(2)=plot3(new_p(new_id==1,1),new_p(new_id==1,2),sample_gPC1,'bo','DisplayName','gPC - sample 1');
+    p2(3)=plot3(new_p(new_id==2,1),new_p(new_id==2,2),sample_gPC2,'go','DisplayName','gPC - sample 2');
+    l2=legend(p2);
+    l2.Location='northwest';
+    title('Response Surface')
+    set(gcf, 'Renderer', 'painters');
+    
+end
