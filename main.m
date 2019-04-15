@@ -1,5 +1,6 @@
 %% Plot densities
-clear all; close all;
+clear all; 
+% close all;
 opt_plot=1;
 
 delta = 20;
@@ -10,7 +11,7 @@ switch 'cloud'
     
     case 'cloud'
         %generate sample
-        n = 5e3;
+        n = 1e3;
         a = randn(n,1);
         b = randn(n,1);
         w=ones(n,1)./n;
@@ -30,11 +31,16 @@ switch 'cloud'
 end
 
 %plot
+n_new=1e4;
+
 if opt_plot
     f1=figure(1);
-    xcoord=linspace(-50,50,1000);
-    [f1,xi1] = ksdensity(sample,xcoord,'Weights',w);
-    p1(1)=plot(xi1,f1,'LineWidth',2,'DisplayName','Original Points');
+    
+    xcoord=linspace(-50,50,round(n_new/5));
+    % [f1,xi1] = ksdensity(sample,xcoord,'Weights',w);
+    
+    [f1,xi1] = ksdensity(example(delta,randn(n_new,1),randn(n_new,1)),xcoord);    
+    p1(1) = plot(xi1,f1,'LineWidth',2,'DisplayName','Original Points');
     
     f2=figure(2);
     p2(1)=plot3(a,b,sample,'r+','DisplayName','Original Points');
@@ -45,13 +51,12 @@ if opt_plot
 end
 %% Build metamodel of indicator using kriging
 
-n_new=1e3;
 new_p=randn(n_new,2);
 [mean_id,std_id]=krigeage(new_p,p,id);
 new_id=round(mean_id);
 
 f3=figure(3);
-p3(1)=plot3(p(:,1),p(:,2),id,'.k','LineWidth',2,'DisplayName','Indicator on original points');
+p3(1)=plot3(p(:,1),p(:,2),id,'sc','LineWidth',2,'DisplayName','Indicator on original points');
 hold on
 % p3(3)=plot3(new_p(:,1),new_p(:,2),mean_id,'r+','LineWidth',2,'DisplayName','mean')
 % p3(4)=plot3(new_p(:,1),new_p(:,2),mean_id+std_id,'g^','LineWidth',2,'DisplayName','mean+std')
@@ -68,7 +73,7 @@ set(gcf, 'Renderer', 'painters');
 %% gPC estimation on each sample
 
 % polynomials
-order_max=5;
+order_max=7;
 dim=2;
 He=poly1D(order_max,'hermite-prob-norm');
 alpha=multi_index(dim,order_max);
@@ -92,6 +97,10 @@ for i_sample=1:m
 end
 
 
+[a_mod1,a_mod1_std,mse1] = gPC_mod_LS(sample(id==1),pol(id==1,:),w(id==1));
+[a_mod2,a_mod2_std,mse2] = gPC_mod_LS(sample(id==2),pol(id==2,:),w(id==2));
+
+
 %% Use indicator and gPC to generate a sample and plot density
 
 %Compute densities
@@ -103,18 +112,22 @@ for i=1:P_max
     end
 end
 
-sample_gPC1=pol_gPC(new_id==1,:)*a(:,1);
-sample_gPC2=pol_gPC(new_id==2,:)*a(:,2);
+% sample_gPC1=pol_gPC(new_id==1,:)*a(:,1);
+% sample_gPC2=pol_gPC(new_id==2,:)*a(:,2);
+
+sample_gPC1=pol_gPC(new_id==1,:)*a_mod1;
+sample_gPC2=pol_gPC(new_id==2,:)*a_mod2;
 
 if opt_plot
     figure(1); hold on;
-    xcoord1=linspace(0,80,1000);
-    xcoord2=linspace(-80,0,1000);
-    m1=mean(sample_gPC1);m2=mean(sample_gPC2);
-    [f1,xi1] = ksdensity(sample_gPC1,xcoord1.*(m1>0)+xcoord2.*(m1<0));
-    [f2,xi2] = ksdensity(sample_gPC2,xcoord1.*(m2>0)+xcoord2.*(m2<0));
+    %     xcoord1=linspace(0,80,500);
+    %     xcoord2=linspace(-80,0,500);
+    %     m1=mean(sample_gPC1);m2=mean(sample_gPC2);
+    %     [f1,xi1] = ksdensity(sample_gPC1,xcoord1.*(m1>0)+xcoord2.*(m1<0));
+    %     [f2,xi2] = ksdensity(sample_gPC2,xcoord1.*(m2>0)+xcoord2.*(m2<0));
+    [f1,xi1] = ksdensity(cat(1,sample_gPC1,sample_gPC2),xcoord);
     p1(2)=plot(xi1,f1,'LineWidth',2,'DisplayName','gPC - sample 1');
-    p1(3)=plot(xi2,f2,'LineWidth',2,'DisplayName','gPC - sample 2');
+    %     p1(3)=plot(xi2,f2,'LineWidth',2,'DisplayName','gPC - sample 2');
     l1=legend(p1);
     l1.Location='northwest';
     title('Densities comparison')
