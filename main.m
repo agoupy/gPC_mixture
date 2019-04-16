@@ -1,6 +1,6 @@
 %% Plot densities
 clear all; 
-% close all;
+close all;
 opt_plot=1;
 
 delta = 20;
@@ -11,7 +11,7 @@ switch 'cloud'
     
     case 'cloud'
         %generate sample
-        n = 1e3;
+        n = 1e2;
         a = randn(n,1);
         b = randn(n,1);
         w=ones(n,1)./n;
@@ -24,6 +24,7 @@ switch 'cloud'
         order = 10;
         dim=2;
         [p,w]= make_quadrature(dim, order);
+        n=size(p,1);
         a=p(:,1);
         b=p(:,2);
         sample = example(delta,a,b);
@@ -31,7 +32,7 @@ switch 'cloud'
 end
 
 %plot
-n_new=1e4;
+n_new=1e3;
 
 if opt_plot
     f1=figure(1);
@@ -58,14 +59,18 @@ new_id=round(mean_id);
 f3=figure(3);
 p3(1)=plot3(p(:,1),p(:,2),id,'sc','LineWidth',2,'DisplayName','Indicator on original points');
 hold on
-% p3(3)=plot3(new_p(:,1),new_p(:,2),mean_id,'r+','LineWidth',2,'DisplayName','mean')
-% p3(4)=plot3(new_p(:,1),new_p(:,2),mean_id+std_id,'g^','LineWidth',2,'DisplayName','mean+std')
-% p3(5)=plot3(new_p(:,1),new_p(:,2),mean_id-std_id,'g^','LineWidth',2,'DisplayName','mean-std')
+% p3(3)=plot3(new_p(:,1),new_p(:,2),mean_id,'r+','LineWidth',2,'DisplayName','mean');
+% p3(4)=plot3(new_p(:,1),new_p(:,2),mean_id+std_id,'g^','LineWidth',2,'DisplayName','mean+std');
+% p3(5)=plot3(new_p(:,1),new_p(:,2),mean_id-std_id,'g^','LineWidth',2,'DisplayName','mean-std');
 p3(2)=plot3(new_p(:,1),new_p(:,2),new_id,'bo','LineWidth',2,'DisplayName','Indicator on new points');
 xlabel('$\xi_1$','FontSize',16,'Interpreter','latex')
 ylabel('$\xi_2$','FontSize',16,'Interpreter','latex')
 zlabel('$Ind(\xi_1,\xi_2)$','FontSize',16,'Interpreter','latex')
 l3=legend(p3);
+x=sort(p(:,1));
+xlim([-5 5])
+ylim([-5 5])
+line(x,1/6-0.5*x.^2,2+0.*x,'LineWidth',2,'Color','r')
 l3.Location='northwest';
 title('Kriging interpolation of the indicator function')
 set(gcf, 'Renderer', 'painters');
@@ -73,7 +78,7 @@ set(gcf, 'Renderer', 'painters');
 %% gPC estimation on each sample
 
 % polynomials
-order_max=7;
+order_max=5;
 dim=2;
 He=poly1D(order_max,'hermite-prob-norm');
 alpha=multi_index(dim,order_max);
@@ -86,16 +91,6 @@ for i=1:P_max
         pol(:,i)=polyval(He{alpha(i,j)+1},p(:,j)).*pol(:,i);
     end
 end
-
-%Compute coefficients for each sample
-a=NaN(P_max,m);
-for i_sample=1:m
-    n_sample=sum(id==i_sample);
-    for i=1:P_max
-        a(i,i_sample) = n/n_sample*sum(sample(id==i_sample).*pol(id==i_sample,i).*w(id==i_sample),1);
-    end
-end
-
 
 [a_mod1,a_mod1_std,mse1] = gPC_mod_LS(sample(id==1),pol(id==1,:),w(id==1));
 [a_mod2,a_mod2_std,mse2] = gPC_mod_LS(sample(id==2),pol(id==2,:),w(id==2));
@@ -126,7 +121,7 @@ if opt_plot
     %     [f1,xi1] = ksdensity(sample_gPC1,xcoord1.*(m1>0)+xcoord2.*(m1<0));
     %     [f2,xi2] = ksdensity(sample_gPC2,xcoord1.*(m2>0)+xcoord2.*(m2<0));
     [f1,xi1] = ksdensity(cat(1,sample_gPC1,sample_gPC2),xcoord);
-    p1(2)=plot(xi1,f1,'LineWidth',2,'DisplayName','gPC - sample 1');
+    p1(2)=plot(xi1,f1,'LineWidth',2,'DisplayName','gPC');
     %     p1(3)=plot(xi2,f2,'LineWidth',2,'DisplayName','gPC - sample 2');
     l1=legend(p1);
     l1.Location='northwest';
